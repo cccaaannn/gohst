@@ -1,4 +1,4 @@
-package server
+package util
 
 import (
 	"strings"
@@ -7,14 +7,14 @@ import (
 	"github.com/cccaaannn/gohst/constant"
 )
 
-func getHttpTime() string {
+func GetHttpTime() string {
 	now := time.Now()
 	dateString := now.UTC().Format(time.RFC1123)
 	dateString = strings.ReplaceAll(dateString, "UTC", "GMT")
 	return dateString
 }
 
-func parseRequestPattern(requestPattern string) (string, constant.HttpMethod, bool) {
+func ParseRequestPattern(requestPattern string) (string, constant.HttpMethod, bool) {
 	splitRequestPattern := strings.Split(requestPattern, " ")
 	pathText := ""
 	var method constant.HttpMethod = ""

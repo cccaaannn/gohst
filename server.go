@@ -1,4 +1,4 @@
-package server
+package gohst
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/cccaaannn/gohst/request"
 	"github.com/cccaaannn/gohst/response"
 	"github.com/cccaaannn/gohst/url"
+	"github.com/cccaaannn/gohst/util"
 )
 
 type HandlerFunc func(*request.Request, *response.Response)
@@ -18,57 +19,37 @@ type handler struct {
 	handlerFunc HandlerFunc
 }
 
-type server struct {
+type Server struct {
 	handlers []handler
 	headers  map[string]string
 }
 
-func CreateServer() *server {
-	return &server{
-		handlers: make([]handler, 0),
-	}
-}
-
-func (server *server) AddHandler(requestPattern string, handlerFunc HandlerFunc) {
-	pathText, method, ok := parseRequestPattern(requestPattern)
-	if !ok {
-		fmt.Printf("Cannot add handler with request pattern of %s\n", requestPattern)
-		return
-	}
-
-	path := url.CreatePath(pathText)
-	handler := handler{
-		path:        path,
-		method:      method,
-		handlerFunc: handlerFunc,
-	}
-
-	server.handlers = append(server.handlers, handler)
-}
-
-func (server *server) SetHeaders(headers map[string]string) {
-	server.headers = headers
-}
-
-func (server *server) getResponseContentTypeHeader(responseHeaders map[string]string) string {
+func (server *Server) getResponseContentTypeHeader(responseHeaders map[string]string) string {
 	if _, ok := responseHeaders[constant.ContentTypeHeader.String()]; ok {
 		return ""
 	}
 	if val, ok := server.headers[constant.ContentTypeHeader.String()]; ok {
-		return fmt.Sprintf("%s: %s", constant.ContentTypeHeader.String(), val)
+		return fmt.Sprintf("%s: %s\r\n", constant.ContentTypeHeader.String(), val)
 	}
-	return fmt.Sprintf("%s: %s", constant.ContentTypeHeader.String(), constant.TextHtml.String())
+	return fmt.Sprintf("%s: %s\r\n", constant.ContentTypeHeader.String(), constant.TextHtml.String())
 }
 
-func (server *server) getContentLengthHeader(body string) string {
+func (server *Server) getContentLengthHeader(body string) string {
 	contentLength := []byte(body)
 	if len(contentLength) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%s: %d", constant.ContentLength, len(contentLength))
+	return fmt.Sprintf("%s: %d\r\n", constant.ContentLength, len(contentLength))
 }
 
-func (server *server) matchHandler(path string, method string) (handler, map[string]string, bool) {
+func (server *Server) getBodyString(body string) string {
+	if body != "" {
+		return fmt.Sprintf("\r\n%s\r\n", body)
+	}
+	return ""
+}
+
+func (server *Server) matchHandler(path string, method string) (handler, map[string]string, bool) {
 	for _, handler := range server.handlers {
 		params, ok := handler.path.Match(path)
 		if ok && (handler.method == "" || handler.method == constant.HttpMethod(method)) {
@@ -78,21 +59,24 @@ func (server *server) matchHandler(path string, method string) (handler, map[str
 	return handler{}, nil, false
 }
 
-func (server *server) handleGenericNotFound(responseStr string) string {
-	dateString := getHttpTime()
+func (server *Server) handleGenericNotFound() string {
+	responseStr := "" +
+		"%s %s %s\r\n" +
+		"Date: %s\r\n" +
+		"Server: %s\r\n" +
+		"Connection: close\r\n" +
+		"%s"
+
 	return fmt.Sprintf(
 		responseStr,
 		constant.HTTPVersion, constant.NotFound.String(), constant.NotFound.Verb(),
-		dateString,
+		util.GetHttpTime(),
 		constant.ServerName,
 		server.getResponseContentTypeHeader(nil),
-		"",
-		"",
-		"",
 	)
 }
 
-func (server *server) handleConnection(conn net.Conn) {
+func (server *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	req, err := request.ParseRequest(conn)
@@ -101,18 +85,15 @@ func (server *server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	dateString := getHttpTime()
-
 	responseStr := "" +
 		"%s %s %s\r\n" +
 		"Date: %s\r\n" +
 		"Server: %s\r\n" +
 		"Connection: close\r\n" +
-		"%s\r\n" +
-		"%s\r\n" +
 		"%s" +
-		"\r\n" +
-		"%s\r\n"
+		"%s" +
+		"%s" +
+		"%s"
 
 	// Query parsing
 	path, query := url.SplitQuery(req.Path)
@@ -123,14 +104,15 @@ func (server *server) handleConnection(conn net.Conn) {
 	req.Params = params
 
 	if !ok {
-		server.handleGenericNotFound(responseStr)
+		responseStr = server.handleGenericNotFound()
 		conn.Write([]byte(responseStr))
 		return
 	}
 
 	response := response.Response{
-		Body:    "",
-		Headers: make(map[string]string),
+		Body:       "",
+		Headers:    make(map[string]string),
+		StatusCode: constant.OK,
 	}
 
 	handler.handlerFunc(req, &response)
@@ -142,13 +124,13 @@ func (server *server) handleConnection(conn net.Conn) {
 
 	responseStr = fmt.Sprintf(
 		responseStr,
-		constant.HTTPVersion, constant.OK.String(), constant.OK.Verb(),
-		dateString,
+		constant.HTTPVersion, response.StatusCode.String(), response.StatusCode.Verb(),
+		util.GetHttpTime(),
 		constant.ServerName,
 		server.getResponseContentTypeHeader(response.Headers),
 		server.getContentLengthHeader(response.Body),
 		userHeaders,
-		response.Body,
+		server.getBodyString(response.Body),
 	)
 
 	conn.Write([]byte(responseStr))
