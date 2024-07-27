@@ -32,6 +32,6 @@ func (c HTTPStatusCode) Verb() string {
 	case InternalServerError:
 		return "Internal Server Error"
 	default:
-		return "Unknown Status Code"
+		return "Unknown"
 	}
 }
