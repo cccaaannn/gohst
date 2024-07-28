@@ -3,6 +3,7 @@ package gohst
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/cccaaannn/gohst/request"
 	"github.com/cccaaannn/gohst/response"
@@ -16,14 +17,14 @@ type Response = response.Response
 func CreateServer() *Server {
 	return &Server{
 		handlers: make([]handler, 0),
+		headers:  getDefaultHeaders(),
 	}
 }
 
-func (server *Server) AddHandler(requestPattern string, handlerFunc HandlerFunc) {
+func (server *Server) AddHandler(requestPattern string, handlerFunc handlerFunc) {
 	pathText, method, ok := util.ParseRequestPattern(requestPattern)
 	if !ok {
-		fmt.Printf("Cannot add handler with request pattern of %s\n", requestPattern)
-		return
+		panic(fmt.Sprintf("Cannot add handler with request pattern of %s\n", requestPattern))
 	}
 
 	path := url.CreatePath(pathText)
@@ -40,21 +41,61 @@ func (server *Server) SetHeaders(headers map[string]string) {
 	server.headers = headers
 }
 
-func (server *Server) ListenAndServe(address string) {
+// func (server *Server) ListenAndServe(address string) {
+// 	listener, err := net.Listen("tcp", address)
+// 	if err != nil {
+// 		fmt.Println("Error listening ", err.Error())
+// 		return
+// 	}
+// 	defer listener.Close()
+// 	fmt.Printf("Listening on %s\n", address)
+
+// 	for {
+// 		conn, err := listener.Accept()
+// 		if err != nil {
+// 			fmt.Println("Error accepting ", err.Error())
+// 			return
+// 		}
+// 		go server.handleConnection(conn)
+// 	}
+// }
+
+func (server *Server) ListenAndServe(address string) (func(), error) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		fmt.Println("Error listening ", err.Error())
-		return
+		return nil, fmt.Errorf("error listening: %v", err)
 	}
-	defer listener.Close()
 	fmt.Printf("Listening on %s\n", address)
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println("Error accepting ", err.Error())
-			return
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				select {
+				case <-stop:
+					return
+				default:
+					fmt.Println("Error accepting: ", err.Error())
+					continue
+				}
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				server.handleConnection(conn)
+			}()
 		}
-		go server.handleConnection(conn)
+	}()
+
+	shutdown := func() {
+		close(stop)
+		listener.Close()
+		wg.Wait()
+		fmt.Println("Server stopped")
 	}
+
+	return shutdown, nil
 }
