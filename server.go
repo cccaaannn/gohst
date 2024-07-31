@@ -15,7 +15,7 @@ type handlerFunc func(*Request, *Response)
 
 type handler struct {
 	path        url.Path
-	method      constant.HttpMethod
+	method      string
 	handlerFunc handlerFunc
 }
 
@@ -35,7 +35,7 @@ func getDefaultHeaders() map[string]string {
 func (server *Server) matchHandler(path string, method string) (handler, map[string]string, bool) {
 	for _, handler := range server.handlers {
 		params, ok := handler.path.Match(path)
-		if ok && (handler.method == "" || handler.method == constant.HttpMethod(method)) {
+		if ok && (handler.method == "" || handler.method == method) {
 			return handler, params, true
 		}
 	}
@@ -111,12 +111,12 @@ func (server *Server) handleConnection(conn net.Conn) {
 	req.Query = url.ParseQuery(query)
 
 	// Path parsing
-	handler, params, ok := server.matchHandler(path, req.Method)
+	handler, params, matched := server.matchHandler(path, req.Method)
 	req.Params = params
 
 	response := response.CreateOkResponse()
 
-	if !ok {
+	if !matched {
 		response.StatusCode = constant.NotFound
 		responseStr := server.buildResponseString(response)
 		conn.Write([]byte(responseStr))

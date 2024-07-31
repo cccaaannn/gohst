@@ -3,8 +3,6 @@ package util
 import (
 	"strings"
 	"time"
-
-	"github.com/cccaaannn/gohst/constant"
 )
 
 func GetHttpTime() string {
@@ -14,12 +12,12 @@ func GetHttpTime() string {
 	return dateString
 }
 
-func ParseRequestPattern(requestPattern string) (string, constant.HttpMethod, bool) {
+func ParseRequestPattern(requestPattern string) (string, string, bool) {
 	splitRequestPattern := strings.Split(requestPattern, " ")
 	pathText := ""
-	var method constant.HttpMethod = ""
+	var method = ""
 	if len(splitRequestPattern) == 2 {
-		method = constant.HttpMethod(splitRequestPattern[0])
+		method = splitRequestPattern[0]
 		pathText = splitRequestPattern[1]
 	} else if len(splitRequestPattern) == 1 {
 		pathText = splitRequestPattern[0]
