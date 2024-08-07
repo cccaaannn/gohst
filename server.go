@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/cccaaannn/gohst/constant"
-	"github.com/cccaaannn/gohst/request"
-	"github.com/cccaaannn/gohst/response"
-	"github.com/cccaaannn/gohst/url"
-	"github.com/cccaaannn/gohst/util"
+	"github.com/cccaaannn/gohst/src/constant"
+	"github.com/cccaaannn/gohst/src/request"
+	"github.com/cccaaannn/gohst/src/response"
+	"github.com/cccaaannn/gohst/src/url"
+	"github.com/cccaaannn/gohst/src/util"
 )
 
 type handlerFunc func(*Request, *Response)
@@ -117,7 +117,7 @@ func (server *Server) handleConnection(conn net.Conn) {
 	response := response.CreateOkResponse()
 
 	if !matched {
-		response.StatusCode = constant.NotFound
+		response.StatusCode = constant.NotFoundStatus
 		responseStr := server.buildResponseString(response)
 		conn.Write([]byte(responseStr))
 		return

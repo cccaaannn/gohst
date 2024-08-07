@@ -5,10 +5,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/cccaaannn/gohst/request"
-	"github.com/cccaaannn/gohst/response"
-	"github.com/cccaaannn/gohst/url"
-	"github.com/cccaaannn/gohst/util"
+	"github.com/cccaaannn/gohst/src/request"
+	"github.com/cccaaannn/gohst/src/response"
+	"github.com/cccaaannn/gohst/src/url"
+	"github.com/cccaaannn/gohst/src/util"
 )
 
 type Request = request.Request
@@ -41,13 +41,14 @@ func (server *Server) SetHeaders(headers map[string]string) {
 	server.headers = headers
 }
 
-func (server *Server) ListenAndServe(address string) (func(), error) {
+func (server *Server) ListenAndServe(address string) (chan struct{}, error) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("error listening: %v", err)
 	}
 	fmt.Printf("Listening on %s\n", address)
 
+	var once sync.Once
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 
@@ -76,13 +77,15 @@ func (server *Server) ListenAndServe(address string) (func(), error) {
 		}
 	}()
 
-	// Function to gracefully shutdown the server
-	shutdown := func() {
-		close(stop)
-		listener.Close()
-		wg.Wait()
-		fmt.Println("Server stopped")
-	}
+	// Goroutine to handle gracefully shuting down the server
+	go func() {
+		<-stop
+		once.Do(func() {
+			listener.Close()
+			wg.Wait()
+			fmt.Println("Server stopped")
+		})
+	}()
 
-	return shutdown, nil
+	return stop, nil
 }
