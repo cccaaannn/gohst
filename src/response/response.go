@@ -1,6 +1,6 @@
 package response
 
-import "github.com/cccaaannn/gohst/constant"
+import "github.com/cccaaannn/gohst/src/constant"
 
 type Response struct {
 	Body       string
@@ -12,6 +12,6 @@ func CreateOkResponse() *Response {
 	return &Response{
 		Headers:    make(map[string]string),
 		Body:       "",
-		StatusCode: constant.OK,
+		StatusCode: constant.OkStatus,
 	}
 }
