@@ -11,8 +11,13 @@ import (
 )
 
 const (
-	ServerHost = "http://localhost"
-	ServerPort = "8080"
+	ServerHost          = "http://localhost"
+	ServerHostTLS       = "https://localhost"
+	ServerPort          = "8080"
+	ApiResponse         = `{"message": "Hello, World!"}`
+	ApiPageContent      = `{"message": "Hello, World!"}`
+	AboutPageContent    = "<body><h1>About</h1><p>This is the about page</p></body>"
+	NotFoundPageContent = "<body><h1>Not Found</h1><p>The page you are looking for does not exist</p></body>"
 )
 
 type result struct {
@@ -21,11 +26,6 @@ type result struct {
 	Body   string            `json:"body"`
 }
 
-const apiResponse = `{"message": "Hello, World!"}`
-const apiPageContent = `{"message": "Hello, World!"}`
-const aboutPageContent = "<body><h1>About</h1><p>This is the about page</p></body>"
-const notFoundPageContent = "<body>	<h1>Not Found</h1><p>The page you are looking for does not exist</p></body>"
-
 func createAPIServer() *Server {
 	// Create a new server
 	server := CreateServer()
@@ -33,6 +33,10 @@ func createAPIServer() *Server {
 	// Set default headers
 	headers := map[string]string{"Content-Type": "application/json"}
 	server.SetHeaders(headers)
+
+	server.AddHandler("GET /tls", func(req *Request, res *Response) {
+		res.Body = ApiResponse
+	})
 
 	server.AddHandler("POST /path1/:param1/path2/:param2", func(req *Request, res *Response) {
 		result := result{
@@ -56,17 +60,17 @@ func createHTMLServer() *Server {
 	server.SetHeaders(headers)
 
 	server.AddHandler("GET /about", func(req *Request, res *Response) {
-		res.Body = aboutPageContent
+		res.Body = AboutPageContent
 	})
 
 	server.AddHandler("GET /api", func(req *Request, res *Response) {
 		res.Headers["Content-Type"] = "application/json"
-		res.Body = apiPageContent
+		res.Body = ApiPageContent
 	})
 
 	server.AddHandler("/*", func(req *Request, res *Response) {
 		res.StatusCode = http.StatusNotFound
-		res.Body = notFoundPageContent
+		res.Body = NotFoundPageContent
 	})
 
 	return server
@@ -77,15 +81,20 @@ func createWithBrokenPattern() {
 	server.AddHandler("POST invalid pattern", func(req *Request, res *Response) {})
 }
 
+func setup() {
+	time.Sleep(500 * time.Millisecond)
+}
+
 func TestRequestParsing(t *testing.T) {
 	// Given
+	setup()
 	server := createAPIServer()
-	shutdown, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer shutdown()
-	time.Sleep(1 * time.Second) // Delay to allow the server to start
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
 
 	// When
 	resp, err := http.Post(
@@ -95,7 +104,7 @@ func TestRequestParsing(t *testing.T) {
 			ServerPort,
 		),
 		"application/json",
-		bytes.NewReader([]byte(apiResponse)),
+		bytes.NewReader([]byte(ApiResponse)),
 	)
 	if err != nil {
 		t.Fatalf("Failed to send GET request: %v", err)
@@ -116,7 +125,7 @@ func TestRequestParsing(t *testing.T) {
 	expectedResult := result{
 		Params: map[string]string{"param1": "test1", "param2": "5"},
 		Query:  map[string]string{"query1": "test2", "query2": "2"},
-		Body:   apiResponse,
+		Body:   ApiResponse,
 	}
 
 	expectedJson, _ := json.Marshal(expectedResult)
@@ -128,13 +137,14 @@ func TestRequestParsing(t *testing.T) {
 
 func TestGenericNotFound(t *testing.T) {
 	// Given
+	setup()
 	server := createAPIServer()
-	shutdown, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer shutdown()
-	time.Sleep(1 * time.Second) // Delay to allow the server to start
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
 
 	// When
 	resp, err := http.Get(
@@ -163,13 +173,14 @@ func TestGenericNotFound(t *testing.T) {
 
 func TestHtmlContent(t *testing.T) {
 	// Given
+	setup()
 	server := createHTMLServer()
-	shutdown, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer shutdown()
-	time.Sleep(1 * time.Second) // Delay to allow the server to start
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
 
 	// When
 	resp, err := http.Get(
@@ -196,20 +207,21 @@ func TestHtmlContent(t *testing.T) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if string(aboutPageContent) != string(body) {
-		t.Fatalf("Expected response body %v, got %v", string(aboutPageContent), string(body))
+	if string(AboutPageContent) != string(body) {
+		t.Fatalf("Expected response body %v, got %v", string(AboutPageContent), string(body))
 	}
 }
 
 func TestCustomRequestHeader(t *testing.T) {
 	// Given
+	setup()
 	server := createHTMLServer()
-	shutdown, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer shutdown()
-	time.Sleep(1 * time.Second) // Delay to allow the server to start
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
 
 	// When
 	resp, err := http.Get(
@@ -236,20 +248,21 @@ func TestCustomRequestHeader(t *testing.T) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if string(apiPageContent) != string(body) {
-		t.Fatalf("Expected response body %v, got %v", string(aboutPageContent), string(body))
+	if string(ApiPageContent) != string(body) {
+		t.Fatalf("Expected response body %v, got %v", string(AboutPageContent), string(body))
 	}
 }
 
 func TestWildcardPath(t *testing.T) {
 	// Given
+	setup()
 	server := createHTMLServer()
-	shutdown, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer shutdown()
-	time.Sleep(1 * time.Second) // Delay to allow the server to start
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
 
 	// When
 	resp, err := http.Get(
@@ -276,12 +289,14 @@ func TestWildcardPath(t *testing.T) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if string(notFoundPageContent) != string(body) {
-		t.Fatalf("Expected response body %v, got %v", string(notFoundPageContent), string(body))
+	if string(NotFoundPageContent) != string(body) {
+		t.Fatalf("Expected response body %v, got %v", string(NotFoundPageContent), string(body))
 	}
 }
 
 func TestBrokenHandlerPattern(t *testing.T) {
+	setup()
+
 	// Then
 	defer func() {
 		if r := recover(); r == nil {
