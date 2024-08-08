@@ -2,6 +2,7 @@ package gohst
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ const (
 	ServerHost          = "http://localhost"
 	ServerHostTLS       = "https://localhost"
 	ServerPort          = "8080"
+	TestCertPath        = "test/cert/localhost.crt"
+	TestKeyPath         = "test/cert/localhost.key"
 	ApiResponse         = `{"message": "Hello, World!"}`
 	ApiPageContent      = `{"message": "Hello, World!"}`
 	AboutPageContent    = "<body><h1>About</h1><p>This is the about page</p></body>"
@@ -306,4 +309,50 @@ func TestBrokenHandlerPattern(t *testing.T) {
 
 	// Given
 	createWithBrokenPattern()
+}
+
+func TestTLS(t *testing.T) {
+	// Given
+	setup()
+	server := createAPIServer()
+	stop, err := server.ListenAndServeTLS(fmt.Sprintf(":%s", ServerPort), TestCertPath, TestKeyPath)
+	if err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Test only
+			},
+		},
+	}
+
+	// When
+	resp, err := client.Get(
+		fmt.Sprintf(
+			"%s:%s/tls",
+			ServerHostTLS,
+			ServerPort,
+		),
+	)
+	if err != nil {
+		t.Fatalf("Failed to send GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	expectedStatusCode := http.StatusOK
+	if resp.StatusCode != expectedStatusCode {
+		t.Fatalf("Expected status code %v, got %v", expectedStatusCode, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	expectedBody := ApiResponse
+	bodyStr := string(body)
+	if bodyStr != expectedBody {
+		t.Fatalf("Expected response body %v, got %v", string(expectedBody), bodyStr)
+	}
 }
