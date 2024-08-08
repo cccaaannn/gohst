@@ -15,20 +15,20 @@ import (
 
 type HandlerFunc func(*request.Request, *response.Response)
 
-type Handler struct {
-	Path        url.Path
-	Method      string
-	HandlerFunc HandlerFunc
+type handler struct {
+	path        url.Path
+	method      string
+	handlerFunc HandlerFunc
 }
 
 type Server struct {
-	handlers []Handler
+	handlers []handler
 	headers  map[string]string
 }
 
 func CreateServer() *Server {
 	return &Server{
-		handlers: make([]Handler, 0),
+		handlers: make([]handler, 0),
 		headers:  getDefaultHeaders(),
 	}
 }
@@ -40,10 +40,10 @@ func (sv *Server) AddHandler(requestPattern string, handlerFunc HandlerFunc) {
 	}
 
 	path := url.CreatePath(pathText)
-	handler := Handler{
-		Path:        path,
-		Method:      method,
-		HandlerFunc: handlerFunc,
+	handler := handler{
+		path:        path,
+		method:      method,
+		handlerFunc: handlerFunc,
 	}
 
 	sv.handlers = append(sv.handlers, handler)
@@ -53,17 +53,33 @@ func (sv *Server) SetHeaders(headers map[string]string) {
 	sv.headers = headers
 }
 
-func (sv *Server) ListenAndServe(address string) (chan struct{}, error) {
-	return sv.listenAndServe(address, nil)
-}
+func (sv *Server) ListenAndServeTLS(address string, certFile string, keyFile string) (chan struct{}, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("error loading certificate: %v", err)
+	}
 
-func (sv *Server) listenAndServe(address string, config *tls.Config) (chan struct{}, error) {
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
 	listener, err := tls.Listen("tcp", address, config)
 	if err != nil {
 		return nil, fmt.Errorf("error listening: %v", err)
 	}
 	fmt.Printf("Listening on %s\n", address)
 
+	return sv.listenAndServe(listener)
+}
+
+func (sv *Server) ListenAndServe(address string) (chan struct{}, error) {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("error listening: %v", err)
+	}
+	fmt.Printf("Listening on %s\n", address)
+
+	return sv.listenAndServe(listener)
+}
+
+func (sv *Server) listenAndServe(listener net.Listener) (chan struct{}, error) {
 	var once sync.Once
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
@@ -114,14 +130,14 @@ func getDefaultHeaders() map[string]string {
 	}
 }
 
-func (server *Server) matchHandler(path string, method string) (Handler, map[string]string, bool) {
+func (server *Server) matchHandler(path string, method string) (handler, map[string]string, bool) {
 	for _, handler := range server.handlers {
-		params, ok := handler.Path.Match(path)
-		if ok && (handler.Method == "" || handler.Method == method) {
+		params, ok := handler.path.Match(path)
+		if ok && (handler.method == "" || handler.method == method) {
 			return handler, params, true
 		}
 	}
-	return Handler{}, nil, false
+	return handler{}, nil, false
 }
 
 func (server *Server) getMergedHeaders(response *response.Response) map[string]string {
@@ -196,18 +212,18 @@ func (server *Server) handleConnection(conn net.Conn) {
 	handler, params, matched := server.matchHandler(path, req.Method)
 	req.Params = params
 
-	response := response.CreateOkResponse()
+	res := response.CreateOkResponse()
 
 	if !matched {
-		response.StatusCode = constant.NotFoundStatus
-		responseStr := server.buildResponseString(response)
+		res.StatusCode = constant.NotFoundStatus
+		responseStr := server.buildResponseString(res)
 		conn.Write([]byte(responseStr))
 		return
 	}
 
-	handler.HandlerFunc(req, response)
+	handler.handlerFunc(req, res)
 
-	responseStr := server.buildResponseString(response)
+	responseStr := server.buildResponseString(res)
 
 	conn.Write([]byte(responseStr))
 }
