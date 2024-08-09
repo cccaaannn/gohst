@@ -7,6 +7,44 @@ A simple http server
 
 ---
 
+## Minimal usage example
+
+## Install package
+```shell
+go get github.com/cccaaannn/gohst
+```
+
+```go
+package main
+
+import "github.com/cccaaannn/gohst"
+
+func main() {
+	server := gohst.CreateServer()
+
+	server.AddHandler("GET /hi", func(req *gohst.Request, res *gohst.Response) {
+		res.Body = `
+		<body>
+			<h1>Hello world!</h1>
+		</body>
+		`
+	})
+
+	server.AddHandler("/*", func(req *gohst.Request, res *gohst.Response) {
+		res.StatusCode = 404
+		res.Body = `
+		<body>
+			<h1>404</h1>
+		</body>
+		`
+	})
+
+	stop, _ := server.ListenAndServe(":8080")
+	<-stop
+}
+```
+
+## Development
 
 ## Test
 ```shell
