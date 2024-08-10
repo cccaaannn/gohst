@@ -7,27 +7,33 @@ A simple http server
 
 ---
 
-## Minimal usage example
+## Usage
 
-## Install package
+### Install package
 ```shell
 go get github.com/cccaaannn/gohst
 ```
 
+### Minimal example
 ```go
 package main
 
-import "github.com/cccaaannn/gohst"
+import (
+	"fmt"
+
+	"github.com/cccaaannn/gohst"
+)
 
 func main() {
 	server := gohst.CreateServer()
 
-	server.AddHandler("GET /hi", func(req *gohst.Request, res *gohst.Response) {
-		res.Body = `
+	server.AddHandler("GET /hi/:name", func(req *gohst.Request, res *gohst.Response) {
+		name := req.Params["name"]
+		res.Body = fmt.Sprintf(`
 		<body>
-			<h1>Hello world!</h1>
+			<h1>Hello %s!</h1>
 		</body>
-		`
+		`, name)
 	})
 
 	server.AddHandler("/*", func(req *gohst.Request, res *gohst.Response) {
@@ -42,15 +48,18 @@ func main() {
 	stop, _ := server.ListenAndServe(":8080")
 	<-stop
 }
+
 ```
+
+
 
 ## Development
 
-## Test
+### Test
 ```shell
 go test -v
 ```
-## Coverage
+### Coverage
 ```shell
 go test -coverprofile=coverage.out
 go tool cover -html=coverage.out
