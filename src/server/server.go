@@ -13,17 +13,10 @@ import (
 	"github.com/cccaaannn/gohst/src/util"
 )
 
-type HandlerFunc func(*request.Request, *response.Response)
-
-type handler struct {
-	path        url.Path
-	method      string
-	handlerFunc HandlerFunc
-}
-
 type Server struct {
-	handlers []handler
-	headers  map[string]string
+	handlers    []handler
+	headers     map[string]string
+	middlewares []Middleware
 }
 
 func CreateServer() *Server {
@@ -51,6 +44,10 @@ func (sv *Server) AddHandler(requestPattern string, handlerFunc HandlerFunc) {
 
 func (sv *Server) SetHeaders(headers map[string]string) {
 	sv.headers = headers
+}
+
+func (sv *Server) Use(middleware Middleware) {
+	sv.middlewares = append(sv.middlewares, middleware)
 }
 
 func (sv *Server) ListenAndServeTLS(address string, certFile string, keyFile string) (chan struct{}, error) {
@@ -195,7 +192,17 @@ func (server *Server) buildResponseString(response *response.Response) string {
 	return responseStr
 }
 
-func (server *Server) handleConnection(conn net.Conn) {
+// The chain is constructed by iterating middleware slice in reverse order, by passing the next middleware to the current middleware
+// Ex: [middleware1, middleware2, middleware3] This slice will construct this chain -> middleware1(middleware2(middleware3(handlerFunc)))
+func (sv *Server) constructMiddlewareChain(handler HandlerFunc) HandlerFunc {
+	finalHandler := handler
+	for i := len(sv.middlewares) - 1; i >= 0; i-- {
+		finalHandler = sv.middlewares[i](finalHandler)
+	}
+	return finalHandler
+}
+
+func (sv *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	req, err := request.ParseRequest(conn)
@@ -209,21 +216,25 @@ func (server *Server) handleConnection(conn net.Conn) {
 	req.Query = url.ParseQuery(query)
 
 	// Path parsing
-	handler, params, matched := server.matchHandler(path, req.Method)
+	handler, params, matched := sv.matchHandler(path, req.Method)
 	req.Params = params
 
 	res := response.CreateOkResponse()
 
 	if !matched {
 		res.StatusCode = constant.NotFoundStatus
-		responseStr := server.buildResponseString(res)
+		responseStr := sv.buildResponseString(res)
 		conn.Write([]byte(responseStr))
 		return
 	}
 
-	handler.handlerFunc(req, res)
+	// Construct middleware chain
+	finalHandler := sv.constructMiddlewareChain(handler.handlerFunc)
 
-	responseStr := server.buildResponseString(res)
+	// Call final handler, this is either the handler function or the middleware chain
+	finalHandler(req, res)
+
+	responseStr := sv.buildResponseString(res)
 
 	conn.Write([]byte(responseStr))
 }
