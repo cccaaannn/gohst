@@ -21,6 +21,11 @@ const (
 	ApiPageContent      = `{"message": "Hello, World!"}`
 	AboutPageContent    = "<body><h1>About</h1><p>This is the about page</p></body>"
 	NotFoundPageContent = "<body><h1>Not Found</h1><p>The page you are looking for does not exist</p></body>"
+	UnauthorizedContent = "<body><h1>401 Unauthorized</h1></body>"
+	TestHeaderContent1  = "banana"
+	TestHeaderContent2  = "melon"
+	TestHeaderContent3  = "apple"
+	TestHeaderName      = "Test-Header"
 )
 
 type result struct {
@@ -79,9 +84,47 @@ func createHTMLServer() *Server {
 	return server
 }
 
-func createWithBrokenPattern() {
+func createBrokenPatternServer() {
 	server := CreateServer()
 	server.AddHandler("POST invalid pattern", func(req *Request, res *Response) {})
+}
+
+func createMiddlewareServer() *Server {
+	// Create a new server
+	server := CreateServer()
+
+	// Middleware 1
+	server.Use(func(next HandlerFunc) HandlerFunc {
+		return func(req *Request, res *Response) {
+
+			var testHeader string = req.Headers[TestHeaderName]
+
+			if testHeader == "" {
+				res.StatusCode = 401
+				res.Body = UnauthorizedContent
+				return
+			}
+
+			req.Context[TestHeaderName] = testHeader
+
+			next(req, res)
+		}
+	})
+
+	// Middleware 2
+	server.Use(func(next HandlerFunc) HandlerFunc {
+		return func(req *Request, res *Response) {
+			req.Context[TestHeaderName] = fmt.Sprintf("%s%s", req.Context[TestHeaderName], TestHeaderContent2)
+			next(req, res)
+		}
+	})
+
+	server.AddHandler("GET /middleware", func(req *Request, res *Response) {
+		body := fmt.Sprintf("%s%s", req.Context[TestHeaderName], TestHeaderContent3)
+		res.Body = body
+	})
+
+	return server
 }
 
 func setup() {
@@ -210,8 +253,8 @@ func TestHtmlContent(t *testing.T) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if string(AboutPageContent) != string(body) {
-		t.Fatalf("Expected response body %v, got %v", string(AboutPageContent), string(body))
+	if AboutPageContent != string(body) {
+		t.Fatalf("Expected response body %v, got %v", AboutPageContent, string(body))
 	}
 }
 
@@ -251,8 +294,8 @@ func TestCustomRequestHeader(t *testing.T) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if string(ApiPageContent) != string(body) {
-		t.Fatalf("Expected response body %v, got %v", string(AboutPageContent), string(body))
+	if ApiPageContent != string(body) {
+		t.Fatalf("Expected response body %v, got %v", ApiPageContent, string(body))
 	}
 }
 
@@ -308,7 +351,7 @@ func TestBrokenHandlerPattern(t *testing.T) {
 	}()
 
 	// Given
-	createWithBrokenPattern()
+	createBrokenPatternServer()
 }
 
 func TestTLS(t *testing.T) {
@@ -354,5 +397,90 @@ func TestTLS(t *testing.T) {
 	bodyStr := string(body)
 	if bodyStr != expectedBody {
 		t.Fatalf("Expected response body %v, got %v", string(expectedBody), bodyStr)
+	}
+}
+
+func TestMiddlewareInterception(t *testing.T) {
+	// Given
+	setup()
+	server := createMiddlewareServer()
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	if err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
+
+	// When
+	resp, err := http.Get(
+		fmt.Sprintf(
+			"%s:%s/middleware",
+			ServerHost,
+			ServerPort,
+		),
+	)
+	if err != nil {
+		t.Fatalf("Failed to send GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	expectedStatusCode := http.StatusUnauthorized
+	if resp.StatusCode != expectedStatusCode {
+		t.Fatalf("Expected status code %v, got %v", expectedStatusCode, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if UnauthorizedContent != string(body) {
+		t.Fatalf("Expected response body %v, got %v", UnauthorizedContent, string(body))
+	}
+}
+
+func TestMiddlewareRunOrder(t *testing.T) {
+	// Server middleware should run in the order they are added
+	// Expected response body: bananamelonapple
+
+	// Given
+	setup()
+	server := createMiddlewareServer()
+	stop, err := server.ListenAndServe(fmt.Sprintf(":%s", ServerPort))
+	if err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer close(stop)
+	time.Sleep(500 * time.Millisecond) // Delay to allow the server to start
+
+	// When
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf(
+			"%s:%s/middleware",
+			ServerHost,
+			ServerPort,
+		),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create GET request: %v", err)
+	}
+
+	req.Header.Add(TestHeaderName, TestHeaderContent1)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to send GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	expectedStatusCode := http.StatusOK
+	if resp.StatusCode != expectedStatusCode {
+		t.Fatalf("Expected status code %v, got %v", expectedStatusCode, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	expectedBody := fmt.Sprintf("%s%s%s", TestHeaderContent1, TestHeaderContent2, TestHeaderContent3)
+	if expectedBody != string(body) {
+		t.Fatalf("Expected response body %v, got %v", expectedBody, string(body))
 	}
 }
