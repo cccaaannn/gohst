@@ -7,6 +7,13 @@ A simple http server
 
 ---
 
+## Features
+
+1. Simple usage
+2. Path parsing
+3. TLS support
+4. Middlewares
+
 ## Usage
 
 ### Install package
@@ -51,6 +58,10 @@ func main() {
 
 ```
 
+### Other examples
+1. [example/crud/main.go](/example/crud/main.go)
+2. [example/tls/main.go](/example/tls/main.go)
+3. [example/middleware/main.go](/example/middleware/main.go)
 
 
 ## Development
