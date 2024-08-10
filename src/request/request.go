@@ -17,7 +17,7 @@ type Request struct {
 	Query    map[string]string
 	Params   map[string]string
 	Headers  map[string]string
-	Context  any
+	Context  map[string]any
 }
 
 func readUntilBody(reader *bufio.Reader) (string, error) {
@@ -125,7 +125,7 @@ func ParseRequest(conn net.Conn) (*Request, error) {
 		Protocol: protocol,
 		Body:     body,
 		Headers:  headerMap,
-		Context:  nil,
+		Context:  make(map[string]any),
 	}
 
 	return req, nil
